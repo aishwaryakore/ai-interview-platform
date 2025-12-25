@@ -14,7 +14,15 @@ import { toast } from "sonner"
 import FormField from "./FormField"
 import { useRouter } from "next/navigation"
 
-const authFormSchema = (type : FormType) => {
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+} from "firebase/auth";
+import { auth } from "@/firebase/client";
+
+import { signIn, signUp } from "@/lib/actions/auth.action";
+
+const authFormSchema = (type: FormType) => {
     return z.object({
         name: type === "sign-up" ? z.string().min(3) : z.string().optional(),
         email: z.string().email(),
@@ -36,21 +44,57 @@ const AuthForm = ({ type }: { type: FormType }) => {
     })
 
     // 2. Define a submit handler.
-    function onSubmit(values: z.infer<typeof formSchema>) {
-        try{
-            if (type === "sign-up"){
+    async function onSubmit(values: z.infer<typeof formSchema>) {
+        try {
+            if (type === "sign-up") {
+                const { name, email, password } = values;
+
+                const userCredential = await createUserWithEmailAndPassword(
+                    auth,
+                    email,
+                    password
+                );
+
+                const result = await signUp({
+                    uid: userCredential.user.uid,
+                    name: name!,
+                    email,
+                    password,
+                });
+
+                if (!result?.success) {
+                    toast.error(result.message);
+                    return;
+                }
                 toast.success("Signed Up successfully. Please sign-in")
                 router.push('/sign-in')
                 console.log("SIGN-UP", values)
             }
-            else{
+            else {
+                const { email, password } = values;
+
+                const userCredential = await signInWithEmailAndPassword(
+                    auth,
+                    email,
+                    password
+                );
+
+                const idToken = await userCredential.user.getIdToken();
+                if (!idToken) {
+                    toast.error("Sign in Failed. Please try again.");
+                    return;
+                }
+
+                await signIn({
+                    email,
+                    idToken,
+                });
                 toast.success("Signed In successfully")
                 router.push('/')
                 console.log("SIGN-IN", values)
             }
 
-        }catch(error)
-        {
+        } catch (error) {
             console.log(error)
             toast.error(`There was an error: ${error}`)
         }
@@ -68,31 +112,31 @@ const AuthForm = ({ type }: { type: FormType }) => {
             </div>
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="w-full space-y-6 mt-4 p-4 form">
-                {!isSignIn && (
-              <FormField
-                control={form.control}
-                name="name"
-                label="Name"
-                placeholder="Your Name"
-                type="text"
-              />
-            )}
+                    {!isSignIn && (
+                        <FormField
+                            control={form.control}
+                            name="name"
+                            label="Name"
+                            placeholder="Your Name"
+                            type="text"
+                        />
+                    )}
 
-            <FormField
-              control={form.control}
-              name="email"
-              label="Email"
-              placeholder="Your email address"
-              type="email"
-            />
+                    <FormField
+                        control={form.control}
+                        name="email"
+                        label="Email"
+                        placeholder="Your email address"
+                        type="email"
+                    />
 
-            <FormField
-              control={form.control}
-              name="password"
-              label="Password"
-              placeholder="Enter your password"
-              type="password"
-            />
+                    <FormField
+                        control={form.control}
+                        name="password"
+                        label="Password"
+                        placeholder="Enter your password"
+                        type="password"
+                    />
                     <Button className="btn" type="submit">{isSignIn ? "Sign In" : "Create an Account"}</Button>
                 </form>
             </Form>
